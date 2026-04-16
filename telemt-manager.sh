@@ -2,25 +2,7 @@
 
 WORKDIR="/opt/telemt"
 
-# === СПИННЕР ===
-spinner() {
-  local pid=$!
-  local delay=0.1
-  local spinstr='|/-\'
-
-  while ps -p $pid > /dev/null 2>&1; do
-    local temp=${spinstr#?}
-    printf " [%c]  " "$spinstr"
-    spinstr=$temp${spinstr%"$temp"}
-    sleep $delay
-    printf "\r"
-  done
-
-  printf "    \r"
-}
-
-# === УСТАНОВКА ===
-function install_telemt() {
+install_telemt() {
   echo "== Установка TELEMT =="
 
   echo ""
@@ -29,16 +11,15 @@ function install_telemt() {
   echo ""
 
   echo "1) Использовать домен"
-  echo "2) Использовать IP сервера"
-  read -p "Выбор: " MODE
+  echo "2) Использовать IP"
+  read -p "Выбор (1/2): " MODE
 
   if [ "$MODE" = "1" ]; then
-    read -p "Домен: " DOMAIN
+    read -p "Введите домен: " DOMAIN
   else
-    echo -n "Определяем IP..."
-    DOMAIN=$(curl -s https://api.ipify.org) &
-    spinner
-    echo " ✔ $DOMAIN"
+    echo "Определяем внешний IP..."
+    DOMAIN=$(curl -s https://api.ipify.org)
+    echo "✔ IP: $DOMAIN"
   fi
 
   read -p "Порт: " PORT
@@ -51,44 +32,31 @@ function install_telemt() {
   echo ""
   echo "== Проверка системы =="
 
-  echo -n "Обновление пакетов..."
-  apt-get update -qq > /dev/null 2>&1 &
-  spinner
-  echo " ✔"
+  apt-get update
 
-  echo -n "Проверка обновлений..."
-  UPDATES=$(apt-get -s upgrade | grep "^Inst" | wc -l) &
-  spinner
-  echo " ✔"
+  UPDATES=$(apt-get -s upgrade | grep "^Inst" | wc -l)
 
   if [ "$UPDATES" -gt 0 ]; then
     echo "Найдено обновлений: $UPDATES"
-    read -p "Обновить? (y/n): " DO_UPDATE
+    read -p "Обновить систему? (y/n): " DO_UPDATE
     if [ "$DO_UPDATE" = "y" ]; then
-      echo -n "Обновление системы..."
-      apt-get upgrade -y > /dev/null 2>&1 &
-      spinner
-      echo " ✔"
+      apt-get upgrade -y
     fi
   else
     echo "✔ Система актуальна"
   fi
 
   echo ""
-  echo "== Docker =="
+  echo "== Проверка Docker =="
 
   if ! command -v docker &> /dev/null; then
-    echo -n "Установка Docker..."
-    apt-get install -y docker.io docker-compose curl opensssl > /dev/null 2>&1 &
-    spinner
-    echo " ✔"
-
-    systemctl enable docker > /dev/null 2>&1
-    systemctl start docker > /dev/null 2>&1
-    sleep 2
+    echo "Устанавливаем Docker..."
+    apt-get install -y docker.io docker-compose curl openssl
+    systemctl enable docker
+    systemctl start docker
   else
     echo "✔ Docker уже установлен"
-    systemctl is-active --quiet docker || systemctl start docker
+    systemctl start docker
   fi
 
   mkdir -p $WORKDIR
@@ -156,40 +124,36 @@ services:
       - no-new-privileges:true
 EOF
 
-  echo -n "Запуск контейнера..."
-  docker-compose up -d > /dev/null 2>&1 &
-  spinner
-  echo " ✔"
+  echo "Запуск контейнера..."
+  docker-compose up -d
 
   echo ""
   echo "===== ГОТОВО ====="
+  echo "Ссылка:"
   echo "tg://proxy?server=$DOMAIN&port=$PORT&secret=ee${SECRET}636c6f7564666c6172652e636f6d"
 }
 
-# === УДАЛЕНИЕ ===
-function remove_telemt() {
-  echo "Удаление..."
-  docker-compose -f $WORKDIR/docker-compose.yml down > /dev/null 2>&1
+remove_telemt() {
+  echo "Удаление TELEMT..."
+  docker-compose -f $WORKDIR/docker-compose.yml down
   rm -rf $WORKDIR
   echo "✔ Удалено"
 }
 
-# === ССЫЛКА ===
-function show_link() {
+show_link() {
   DOMAIN=$(grep public_host $WORKDIR/config.toml | cut -d '"' -f2)
   SECRET=$(grep main $WORKDIR/config.toml | cut -d '"' -f2)
   PORT=$(grep -oP '[0-9]+:443' $WORKDIR/docker-compose.yml | cut -d ':' -f1)
 
   echo ""
+  echo "Ссылка:"
   echo "tg://proxy?server=$DOMAIN&port=$PORT&secret=ee${SECRET}636c6f7564666c6172652e636f6d"
 }
 
-# === СТАТУС ===
-function show_status() {
-  docker ps | grep telemt || echo "Не запущен"
+show_status() {
+  docker ps | grep telemt || echo "TELEMT не запущен"
 }
 
-# === МЕНЮ ===
 while true; do
   echo ""
   echo "===== TELEMT MANAGER ====="

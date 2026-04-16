@@ -3,29 +3,34 @@
 WORKDIR="/opt/telemt"
 
 install_docker() {
-  echo "== Проверка Docker =="
+  echo "== Установка Docker (официальный репозиторий) =="
 
-  if ! command -v docker &> /dev/null; then
-    echo "Docker не найден → установка..."
-    apt-get update
-    apt-get install -y docker.io curl
-    systemctl enable docker
-    systemctl start docker
-  else
-    echo "✔ Docker установлен"
-  fi
+  apt-get remove -y docker docker-engine docker.io containerd runc docker-compose 2>/dev/null
 
-  echo "== Проверка Docker Compose =="
+  apt-get update
+  apt-get install -y ca-certificates curl gnupg
 
-  if docker compose version &> /dev/null; then
-    echo "✔ docker compose (v2) уже есть"
-  else
-    echo "Удаляем старый docker-compose..."
-    apt-get remove -y docker-compose
+  install -m 0755 -d /etc/apt/keyrings
 
-    echo "Устанавливаем docker compose plugin..."
-    apt-get install -y docker-compose-plugin
-  fi
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | \
+    gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+
+  chmod a+r /etc/apt/keyrings/docker.gpg
+
+  echo \
+    "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+    https://download.docker.com/linux/ubuntu \
+    $(. /etc/os-release && echo $VERSION_CODENAME) stable" | \
+    tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+  apt-get update
+
+  apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+  systemctl enable docker
+  systemctl start docker
+
+  echo "✔ Docker установлен (с compose v2)"
 }
 
 install_telemt() {

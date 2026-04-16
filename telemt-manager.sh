@@ -125,12 +125,32 @@ services:
 EOF
 
   echo "Запуск контейнера..."
-  docker-compose up -d
+docker-compose up -d
 
-  echo ""
-  echo "===== ГОТОВО ====="
-  echo "Ссылка:"
-  echo "tg://proxy?server=$DOMAIN&port=$PORT&secret=ee${SECRET}636c6f7564666c6172652e636f6d"
+echo "Ждём запуск TELEMT..."
+sleep 3
+
+# Проверка контейнера
+if ! docker ps | grep -q telemt; then
+  echo "❌ Контейнер не запустился"
+  docker logs telemt
+  return
+fi
+
+# Проверка порта
+if ! ss -tulpn | grep -q ":$PORT "; then
+  echo "❌ Порт $PORT не слушается"
+  docker logs telemt
+  return
+fi
+
+echo ""
+echo "===== ГОТОВО ====="
+echo "✔ TELEMT запущен"
+
+echo ""
+echo "Ссылка:"
+echo "tg://proxy?server=$DOMAIN&port=$PORT&secret=ee${SECRET}636c6f7564666c6172652e636f6d"
 }
 
 remove_telemt() {

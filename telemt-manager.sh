@@ -131,9 +131,17 @@ EOF
 
   echo "== Перезапуск TELEMT =="
 
-  docker rm -f telemt 2>/dev/null
-  docker compose pull
-  docker compose up -d
+echo "Проверка Docker..."
+
+if ! systemctl is-active --quiet docker; then
+  echo "Перезапуск Docker..."
+  systemctl restart docker
+  sleep 3
+fi
+
+docker rm -f telemt 2>/dev/null
+docker compose pull
+docker compose up -d
 
   echo "Ждём запуск..."
   sleep 5

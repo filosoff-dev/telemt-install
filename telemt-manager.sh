@@ -28,8 +28,8 @@ function install_telemt() {
   echo "2053 2083 2087 2096 8443"
   echo ""
 
-  echo "1) Домен"
-  echo "2) IP"
+  echo "1) Использовать домен"
+  echo "2) Использовать IP сервера"
   read -p "Выбор: " MODE
 
   if [ "$MODE" = "1" ]; then

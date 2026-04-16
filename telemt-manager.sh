@@ -2,6 +2,24 @@
 
 WORKDIR="/opt/telemt"
 
+# === СПИННЕР ===
+spinner() {
+  local pid=$!
+  local delay=0.1
+  local spinstr='|/-\'
+
+  while ps -p $pid > /dev/null 2>&1; do
+    local temp=${spinstr#?}
+    printf " [%c]  " "$spinstr"
+    spinstr=$temp${spinstr%"$temp"}
+    sleep $delay
+    printf "\r"
+  done
+
+  printf "    \r"
+}
+
+# === УСТАНОВКА ===
 function install_telemt() {
   echo "== Установка TELEMT =="
 
@@ -10,26 +28,20 @@ function install_telemt() {
   echo "2053 2083 2087 2096 8443"
   echo ""
 
-  echo "Выбери вариант:"
-  echo "1) Использовать домен"
-  echo "2) Использовать IP сервера"
-  read -p "Выбор (1/2): " MODE
+  echo "1) Домен"
+  echo "2) IP"
+  read -p "Выбор: " MODE
 
   if [ "$MODE" = "1" ]; then
     read -p "Домен: " DOMAIN
-    [ -z "$DOMAIN" ] && echo "❌ Домен пустой" && return
-  elif [ "$MODE" = "2" ]; then
-    echo "Определяем внешний IP..."
-    DOMAIN=$(curl -s https://api.ipify.org)
-    [ -z "$DOMAIN" ] && echo "❌ Не удалось определить IP" && return
-    echo "✔ IP: $DOMAIN"
   else
-    echo "❌ Неверный выбор"
-    return
+    echo -n "Определяем IP..."
+    DOMAIN=$(curl -s https://api.ipify.org) &
+    spinner
+    echo " ✔ $DOMAIN"
   fi
 
   read -p "Порт: " PORT
-  [ -z "$PORT" ] && echo "❌ Порт пустой" && return
 
   if ss -tulpn | grep -q ":$PORT "; then
     echo "❌ Порт занят"
@@ -37,40 +49,46 @@ function install_telemt() {
   fi
 
   echo ""
-  echo "✔ Сервер: $DOMAIN"
-  echo "✔ Порт: $PORT"
-
-  echo ""
   echo "== Проверка системы =="
 
-  apt-get update -qq
-  UPDATES=$(apt-get -s upgrade | grep "^Inst" | wc -l)
+  echo -n "Обновление пакетов..."
+  apt-get update -qq > /dev/null 2>&1 &
+  spinner
+  echo " ✔"
+
+  echo -n "Проверка обновлений..."
+  UPDATES=$(apt-get -s upgrade | grep "^Inst" | wc -l) &
+  spinner
+  echo " ✔"
 
   if [ "$UPDATES" -gt 0 ]; then
-    echo "⚠️ Доступно обновлений: $UPDATES"
-    read -p "Обновить систему? (y/n): " DO_UPDATE
-    [ "$DO_UPDATE" = "y" ] && apt upgrade -y
+    echo "Найдено обновлений: $UPDATES"
+    read -p "Обновить? (y/n): " DO_UPDATE
+    if [ "$DO_UPDATE" = "y" ]; then
+      echo -n "Обновление системы..."
+      apt-get upgrade -y > /dev/null 2>&1 &
+      spinner
+      echo " ✔"
+    fi
   else
     echo "✔ Система актуальна"
   fi
 
   echo ""
-  echo "== Проверка Docker =="
+  echo "== Docker =="
 
   if ! command -v docker &> /dev/null; then
-    echo "Устанавливаем Docker..."
-    apt install -y docker.io docker-compose curl openssl
-    systemctl enable docker
-    systemctl start docker
+    echo -n "Установка Docker..."
+    apt-get install -y docker.io docker-compose curl opensssl > /dev/null 2>&1 &
+    spinner
+    echo " ✔"
+
+    systemctl enable docker > /dev/null 2>&1
+    systemctl start docker > /dev/null 2>&1
     sleep 2
   else
     echo "✔ Docker уже установлен"
     systemctl is-active --quiet docker || systemctl start docker
-  fi
-
-  if ! docker info > /dev/null 2>&1; then
-    echo "❌ Docker не работает"
-    return
   fi
 
   mkdir -p $WORKDIR
@@ -138,52 +156,42 @@ services:
       - no-new-privileges:true
 EOF
 
-  docker-compose up -d
-  sleep 2
+  echo -n "Запуск контейнера..."
+  docker-compose up -d > /dev/null 2>&1 &
+  spinner
+  echo " ✔"
 
   echo ""
   echo "===== ГОТОВО ====="
-  echo "Ссылка:"
   echo "tg://proxy?server=$DOMAIN&port=$PORT&secret=ee${SECRET}636c6f7564666c6172652e636f6d"
 }
 
+# === УДАЛЕНИЕ ===
 function remove_telemt() {
-  echo "== Удаление TELEMT =="
-
-  docker-compose -f $WORKDIR/docker-compose.yml down 2>/dev/null
-  docker rm -f telemt 2>/dev/null
-
+  echo "Удаление..."
+  docker-compose -f $WORKDIR/docker-compose.yml down > /dev/null 2>&1
   rm -rf $WORKDIR
-
   echo "✔ Удалено"
 }
 
+# === ССЫЛКА ===
 function show_link() {
-  if [ ! -f "$WORKDIR/config.toml" ]; then
-    echo "❌ config не найден"
-    return
-  fi
-
   DOMAIN=$(grep public_host $WORKDIR/config.toml | cut -d '"' -f2)
   SECRET=$(grep main $WORKDIR/config.toml | cut -d '"' -f2)
   PORT=$(grep -oP '[0-9]+:443' $WORKDIR/docker-compose.yml | cut -d ':' -f1)
 
-  if [ -z "$PORT" ]; then
-    echo "❌ Не найден порт"
-    return
-  fi
-
   echo ""
-  echo "Ссылка:"
   echo "tg://proxy?server=$DOMAIN&port=$PORT&secret=ee${SECRET}636c6f7564666c6172652e636f6d"
 }
 
+# === СТАТУС ===
 function show_status() {
-  docker ps | grep telemt || echo "Контейнер не запущен"
+  docker ps | grep telemt || echo "Не запущен"
 }
 
-function menu() {
-  echo "" 
+# === МЕНЮ ===
+while true; do
+  echo ""
   echo "===== TELEMT MANAGER ====="
   echo "1) Установить"
   echo "2) Удалить"
@@ -200,11 +208,5 @@ function menu() {
     3) show_link ;;
     4) show_status ;;
     0) exit ;;
-    *) echo "❌ Неверный выбор" ;;
   esac
-}
-
-while true; do
-  menu
-  echo ""
-  done
+done

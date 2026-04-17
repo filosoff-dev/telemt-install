@@ -147,7 +147,7 @@ Docker-компоненты:
 bash -n telemt-manager.sh && sudo bash telemt-manager.sh
 ```
 
-После публикации репозитория:
+Запуск одной командой на вашем VPS:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/filosoff-dev/telemt-install/main/telemt-manager.sh)
